@@ -42,6 +42,7 @@ PROTECTED = [
     "naturalcolor.color.profiles",
     "naturalcolor.color.camera_lut",
     "naturalcolor.color.lut3d",
+    "naturalcolor.color.icc",
     "naturalcolor.color.whitebalance",
     "naturalcolor.io.demosaic",
     "naturalcolor.io.denoise",

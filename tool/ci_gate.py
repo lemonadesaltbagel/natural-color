@@ -63,6 +63,10 @@ PUBLIC_REQUIRED = [
     "tool/ncseal.py", "pyproject.toml",
 ]
 
+#: directories that are core in their entirety: a release may hold no source
+#: there at all, whether or not the file is on the PROTECTED list
+CORE_DIRS = ["naturalcolor/color", "naturalcolor/model"]
+
 #: sealed when present, but not required (the repository may not carry them)
 OPTIONAL_DATA = {"build/iq.pkl"}
 
@@ -216,6 +220,11 @@ def check_release(root: Path, report: Report, allow_tool=False, no_embedded_key=
         if plain.exists():
             bad.append(f"{plain.relative_to(root)} still plaintext")
     report.check(not bad, f"{len(modules)} modules are ciphertext only", "; ".join(bad[:6]))
+
+    stray = [p.relative_to(root).as_posix() for d in CORE_DIRS
+             for p in sorted((root / d).rglob("*.py")) if "__pycache__" not in p.parts]
+    report.check(not stray, f"no source of any kind in {', '.join(CORE_DIRS)}",
+                 "not on the PROTECTED list, add it to tool/ncseal.py: " + ", ".join(stray[:6]))
 
     bad = []
     for name, entry in sorted(data.items()):

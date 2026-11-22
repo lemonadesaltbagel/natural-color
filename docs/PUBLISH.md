@@ -63,7 +63,8 @@ git push origin v2.0          # 触发 .github/workflows/release.yml
 python tool/ci_gate.py --profile release --strict dist/release/natural-color
 ```
 
-* 清单里 14 个模块（`ncseal.PROTECTED`）全部封了，且**没有**同名 `.py`
+* 清单里 15 个模块（`ncseal.PROTECTED`）全部封了，且**没有**同名 `.py`
+* `naturalcolor/color/`、`naturalcolor/model/` 下**没有任何** `.py`（不在清单里的新文件也会被拦下）
 * 9 个数据文件全部封了，且**没有**明文原件
 * 没有 `tool/`（它带 `unseal`）
 * `external` 模式下没有 `_k.py`
