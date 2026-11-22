@@ -191,6 +191,38 @@ def _encoder(profile=None, hdr=False):
     return profiles.ENCODERS[profile], profile
 
 
+def preview_space(profile=None, hdr=False):
+    """The JPEG colour space a preview is shown in for an output choice.
+
+    sRGB, Adobe RGB and Display P3 preview as themselves; BT.2100 PQ and HDR
+    (both BT.2020) preview in Display P3, the widest gamut a JPEG carries.
+    """
+    profile = profile or "srgb"
+    return "p3" if hdr or profile == "pq" else profile
+
+
+def preview_jpeg(rgb, profile=None, hdr=False, quality=90) -> bytes:
+    """Display-linear sRGB -> preview JPEG in the chosen output's colour space, ICC embedded.
+
+    With hdr=True it is an HDR JPEG: the SDR rendition plus an ISO 21496-1 gain map
+    carrying the same boost as the --hdr export, so HDR displays show it in HDR.
+    """
+    from .color import profiles
+    from .color.icc import for_profile
+    space = preview_space(profile, hdr)
+    code = to_u8(profiles.ENCODERS[space](rgb))
+    icc = for_profile(space)
+    if hdr:
+        from .io import gainmap
+        from .model.hdr import HDRRendition, log2_gain
+        return gainmap.write(code, log2_gain(rgb, HDRRendition().job), icc=icc, quality=quality)
+    from PIL import Image as PILImage
+    import io as _io
+    buf = _io.BytesIO()
+    PILImage.fromarray(code).save(buf, "JPEG", quality=quality, icc_profile=icc)
+    return buf.getvalue()
+
+
 def to_u8(code):
     return (np.clip(code, 0, 1)*255 + 0.5).astype(np.uint8)
 

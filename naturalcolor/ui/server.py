@@ -166,12 +166,11 @@ def develop_settings(q):
     return exposure, (temp, tint)
 
 
-def jpeg_data_url(lin_srgb):
-    from PIL import Image as PILImage
-    from ..color.profiles import encode_srgb
-    buf = io.BytesIO()
-    PILImage.fromarray(render.to_u8(encode_srgb(lin_srgb))).save(buf, "JPEG", quality=90)
-    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+def jpeg_data_url(lin_srgb, profile=None, hdr=False):
+    """Preview as a JPEG data URL in the chosen output's colour space (ICC embedded, so
+    the page colour-manages it); hdr=True adds an ISO 21496-1 gain map, so an HDR
+    display shows the HDR rendition while any other display shows the SDR base."""
+    return "data:image/jpeg;base64," + base64.b64encode(render.preview_jpeg(lin_srgb, profile, hdr)).decode()
 
 
 def options():
@@ -283,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
         add_session(s)
         self._send(200, s.payload())
 
-    # POST /api/render  {id, pipeline, params, exposure?, wb?}
+    # POST /api/render  {id, pipeline, params, exposure?, wb?, profile?, hdr?}
     def render_look(self):
         q = self._json()
         s = get_session(q.get("id"))
@@ -291,7 +290,12 @@ class Handler(BaseHTTPRequestHandler):
         base = s.base(q)
         img = render.apply_look(base, q.get("pipeline", "camera"), q.get("params"))
         look_s = time.perf_counter() - t0
-        self._send(200, {"after": jpeg_data_url(img.rgb), "before": jpeg_data_url(base),
+        profile, hdr = q.get("profile"), bool(q.get("hdr"))
+        if profile not in (None, *render.PROFILES):
+            raise ValueError(f"unknown colour space {profile!r}")
+        # both sides of the comparison in the same colour space; only the look gets the HDR boost
+        self._send(200, {"after": jpeg_data_url(img.rgb, profile, hdr),
+                         "before": jpeg_data_url(base, profile if not hdr else "p3"),
                          "look_s": round(look_s, 3)})
 
     # POST /api/wb/pick  {id, x, y}  x, y in 0..1 of the preview: the WB that makes that spot grey

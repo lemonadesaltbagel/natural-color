@@ -8,7 +8,7 @@ const T = {
     look: "Look", params: "Parameters", curves: "Channel curves",
     curvesHint: "Output per channel, both axes in sRGB encoding.",
     histogram: "Histogram", export: "Export", format: "Format", profile: "Colour space",
-    hdr: "HDR (gain curve, BT.2100 PQ)", exportBtn: "Export full image",
+    hdr: "HDR: preview on HDR displays, export as BT.2100 PQ", exportBtn: "Export full image",
     emptyTitle: "Open a photo to start",
     emptyBody: "Drop a raw file anywhere on this window. Changing the look re-renders the preview; Export renders the full image.",
     tagBase: "Base", tagLook: "Look", modeSplit: "Split", modeLook: "Look", modeBase: "Base",
@@ -32,7 +32,7 @@ const T = {
     noCurves: "This parameter file has no channel curves.",
     failed: "Failed", serverDown: "The server is not responding. Check that python -m naturalcolor ui is still running.",
     probe: "sRGB 8-bit", keys: "Keys: 1–2 look · Y split · \\ look / base · E export",
-    embedded: (p, f) => `Writes ${f} with the ${p} ICC profile embedded. The preview is always shown in sRGB.`,
+    embedded: (p, f, v) => `Writes ${f} with the ${p} ICC profile embedded. The preview is shown in ${v}.`,
     fmtJpg: "JPEG · 8-bit", fmtTif: "TIFF · 16-bit", fmtTif8: "TIFF · 8-bit",
     develop: "Capture settings", exposure: "Exposure", wbTitle: "White balance",
     temp: "Temperature", tint: "Tint", asShot: "As shot", wbPick: "Pick grey",
@@ -50,7 +50,7 @@ const T = {
     look: "观感", params: "参数", curves: "逐通道曲线",
     curvesHint: "各通道输出曲线，两轴均为 sRGB 编码。",
     histogram: "直方图", export: "导出", format: "格式", profile: "色彩空间",
-    hdr: "HDR（增益曲线，BT.2100 PQ）", exportBtn: "导出全尺寸图像",
+    hdr: "HDR：HDR 显示器上预览，导出为 BT.2100 PQ", exportBtn: "导出全尺寸图像",
     emptyTitle: "打开一张照片开始",
     emptyBody: "把 RAW 文件拖到窗口任意位置。切换观感会重新渲染预览；导出时渲染全尺寸图像。",
     tagBase: "基础", tagLook: "观感", modeSplit: "对比", modeLook: "观感", modeBase: "基础",
@@ -74,7 +74,7 @@ const T = {
     noCurves: "该参数文件没有逐通道曲线。",
     failed: "失败", serverDown: "服务器没有响应，请确认 python -m naturalcolor ui 仍在运行。",
     probe: "sRGB 8 位", keys: "快捷键：1–2 观感 · Y 对比 · \\ 观感 / 基础 · E 导出",
-    embedded: (p, f) => `导出 ${f}，内嵌 ${p} ICC 配置文件。预览始终以 sRGB 显示。`,
+    embedded: (p, f, v) => `导出 ${f}，内嵌 ${p} ICC 配置文件。预览以 ${v} 显示。`,
     fmtJpg: "JPEG · 8 位", fmtTif: "TIFF · 16 位", fmtTif8: "TIFF · 8 位",
     develop: "拍摄设置", exposure: "曝光", wbTitle: "白平衡",
     temp: "色温", tint: "色调", asShot: "原始设置", wbPick: "取灰点",
@@ -160,7 +160,7 @@ function buildLooks() {
 
 function lookRequest() {
   const q = { id: state.session.id, pipeline: state.pipeline, params: state.params,
-              exposure: state.dev.ev, wb: state.dev.wb };
+              exposure: state.dev.ev, wb: state.dev.wb, profile: exportProfile(), hdr: $("hdr").checked };
   return q;
 }
 
@@ -316,8 +316,13 @@ function exportProfile() { return $("hdr").checked ? "pq" : $("profileSel").valu
 // Format select value -> /api/export {format, bits} and its i18n label.
 const FORMATS = { jpg: ["jpg", 8, "fmtJpg"], tif: ["tif", 16, "fmtTif"], tif8: ["tif", 8, "fmtTif8"] };
 
+// mirrors render.preview_space: BT.2100 PQ and HDR preview in Display P3, the rest as themselves
+function previewSpace() { const p = exportProfile(); return p === "pq" ? "p3" : p; }
+
 function renderExportNote() {
-  $("exportNote").textContent = t("embedded", ICC_NAMES[exportProfile()], t(FORMATS[$("fmtSel").value][2]));
+  const hdr = $("hdr").checked;
+  const view = ICC_NAMES[previewSpace()] + (hdr ? " + HDR gain map" : "");
+  $("exportNote").textContent = t("embedded", ICC_NAMES[exportProfile()], t(FORMATS[$("fmtSel").value][2]), view);
 }
 
 // ---- capture settings -------------------------------------------------------
@@ -605,6 +610,8 @@ async function init() {
   $("fullRes").addEventListener("change", reopen);
   const exportChanged = () => { $("profileSel").disabled = $("hdr").checked; renderStages(); renderExportNote(); };
   ["hdr", "profileSel", "fmtSel"].forEach((id) => $(id).addEventListener("change", exportChanged));
+  // the preview follows the output: its colour space, and HDR (gain-map JPEG)
+  ["hdr", "profileSel"].forEach((id) => $(id).addEventListener("change", renderLook));
   $("exportBtn").addEventListener("click", exportImage);
   applyLang();
   try {
