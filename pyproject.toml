@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "naturalcolor"
+version = "2.0"
+description = "Camera colour pipeline framework (the colour core ships separately)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "Pillow>=10.0",
+  "rawpy>=0.19",
+]
+
+[project.scripts]
+naturalcolor = "naturalcolor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["naturalcolor*"]
+
+[tool.setuptools.package-data]
+naturalcolor = [
+  "vault/*.json",
+  "vault/_k.py",
+  "color/*.ncs",
+  "model/*.ncs",
+  "io/*.ncs",
+  "ui/static/*",
+]

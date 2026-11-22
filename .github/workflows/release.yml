@@ -1,0 +1,118 @@
+name: release
+
+# Builds a sealed core and publishes it as a release asset.
+# The colour core is never committed here: it is checked out from a private
+# repository with a scoped token, sealed, gated and uploaded as ciphertext only.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      key_mode:
+        description: "embedded (runs anywhere) | external (needs a key)"
+        type: choice
+        options: [external, embedded]
+        default: external
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  sealed-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: unit tests
+        run: python tool/test_vault.py
+
+      # fail before doing any work if the public tree already leaks something
+      - name: gate the public tree
+        run: python tool/ci_gate.py --profile public --strict .
+
+      # the core is private: checked out with a token, never committed here
+      - name: inject the private core
+        env:
+          CORE_TOKEN: ${{ secrets.CORE_REPO_TOKEN }}
+          CORE_REPO: ${{ vars.CORE_REPO }}
+        run: |
+          if [ -z "$CORE_TOKEN" ]; then
+            echo "::error title=missing secret::CORE_REPO_TOKEN is not set; refusing to build a core-less release"
+            exit 1
+          fi
+          if [ -z "$CORE_REPO" ]; then
+            echo "::error title=missing variable::set CORE_REPO=owner/repo to the private core repository"
+            exit 1
+          fi
+          git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/${CORE_REPO}.git" .core-src
+          rsync -a .core-src/naturalcolor/ naturalcolor/
+          rsync -a .core-src/params/ params/
+          rsync -a .core-src/data/ data/
+          if [ -d .core-src/build ]; then mkdir -p build && rsync -a .core-src/build/ build/; fi
+
+      - name: the core really is here
+        run: python tool/ci_gate.py --profile core .
+
+      - name: seal
+        env:
+          CORE_KEY: ${{ secrets.CORE_KEY }}
+          KEY_MODE: ${{ github.event.inputs.key_mode || vars.CORE_KEY_MODE || 'external' }}
+        run: |
+          set -eu
+          if [ -z "${CORE_KEY:-}" ]; then
+            echo "::error title=missing secret::CORE_KEY is required (it also makes builds reproducible)"
+            exit 1
+          fi
+          python tool/ncseal.py build --out dist/release/natural-color --data \
+            --key-mode "${KEY_MODE}" --key "${CORE_KEY}"
+
+      # the release asset must contain ciphertext and nothing else
+      - name: gate the sealed build
+        run: python tool/ci_gate.py --profile release --strict dist/release/natural-color
+
+      - name: verify the sealed build renders identically
+        env:
+          NATURALCOLOR_VAULT_KEY: ${{ secrets.CORE_KEY }}
+        run: python tool/verify_sealed.py --root dist/release/natural-color
+
+      - name: pack
+        run: |
+          set -eu
+          TAG="${GITHUB_REF_NAME:-snapshot}"
+          tar -czf "natural-color-${TAG}.tar.gz" -C dist/release natural-color
+          ls -l natural-color-*.tar.gz
+
+      - name: gate the archive itself
+        run: |
+          set -eu
+          for f in natural-color-*.tar.gz; do
+            python tool/ci_gate.py --profile release --strict "$f"
+          done
+
+      - name: publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: natural-color-*.tar.gz
+          fail_on_unmatched_files: true
+          body: |
+            Sealed colour core + framework.
+
+            Unpack over the framework tree, then either run it as-is (embedded
+            key) or supply the key:
+
+                export NATURALCOLOR_VAULT_KEY_FILE=/path/to/vault.key
+
+            Check what you have: `python -m naturalcolor.core_api`

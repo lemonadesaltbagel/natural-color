@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv*/
+.DS_Store
+build/
+dist/
+_backup/
+*.ncs
+naturalcolor/vault/manifest.json
+naturalcolor/vault/_k.py
+*.tif
+*.tiff
+*.jpg
+!docs/images/*.jpg
+*.jpeg
+*.3FR
+*.ARW

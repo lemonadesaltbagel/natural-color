@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Natural Color</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23777'/%3E%3Ccircle cx='6' cy='6.5' r='3.4' fill='%23e55' fill-opacity='.85'/%3E%3Ccircle cx='10' cy='6.5' r='3.4' fill='%234c6' fill-opacity='.85'/%3E%3Ccircle cx='8' cy='10' r='3.4' fill='%2358f' fill-opacity='.85'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <h1 class="brand">Natural Color</h1>
+    <span class="file" id="fileLabel"></span>
+    <div class="bar-end">
+      <button class="lang" id="langBtn" type="button" aria-label="Switch language">中文</button>
+    </div>
+  </header>
+
+  <aside class="side" aria-label="Controls">
+    <section class="group">
+      <h2 data-i18n="photo">Photo</h2>
+      <label class="drop" id="drop" tabindex="0">
+        <input type="file" id="fileInput" hidden accept=".3fr,.fff,.arw,.dng,.nef,.cr2,.cr3,.raf,.orf,.rw2,.pef,.srw,.tif,.tiff,.jpg,.jpeg,.png">
+        <span class="drop-main" data-i18n="dropMain">Drop a raw file here, or click to choose one</span>
+        <span class="drop-sub" data-i18n="dropSub">3FR, FFF, ARW, DNG and other raws. TIFF, JPEG and PNG are read as sRGB.</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="fullRes">
+        <span data-i18n="fullRes">Decode at full resolution (slower)</span>
+      </label>
+      <dl class="meta" id="meta" hidden></dl>
+    </section>
+
+    <section class="group" id="develop">
+      <h2 data-i18n="develop">Capture settings</h2>
+      <label class="slider">
+        <span class="slider-head"><span data-i18n="exposure">Exposure</span><output id="evOut">0.00 EV</output></span>
+        <input type="range" id="ev" min="-3" max="3" step="0.05" value="0">
+      </label>
+      <div class="wbhead">
+        <span data-i18n="wbTitle">White balance</span>
+        <span class="btns">
+          <button type="button" class="ghost sm" id="wbShot" data-i18n="asShot">As shot</button>
+          <button type="button" class="ghost sm" id="wbPick" aria-pressed="false" data-i18n="wbPick">Pick grey</button>
+        </span>
+      </div>
+      <label class="slider">
+        <span class="slider-head"><span data-i18n="temp">Temperature</span><output id="tempOut">–</output></span>
+        <input type="range" id="temp" min="0" max="1000" step="1" value="500">
+        <span class="ends"><span>2000 K</span><span>12000 K</span></span>
+      </label>
+      <label class="slider">
+        <span class="slider-head"><span data-i18n="tint">Tint</span><output id="tintOut">–</output></span>
+        <input type="range" id="tint" min="-150" max="150" step="1" value="0">
+        <span class="ends"><span data-i18n="tintGreen">green</span><span data-i18n="tintMagenta">magenta</span></span>
+      </label>
+      <p class="hint" id="devHint" data-i18n="devHint">Applied to the raw before the colour pipeline, as if set in the camera. Double-click a slider to reset it.</p>
+    </section>
+
+    <section class="group">
+      <h2 data-i18n="look">Look</h2>
+      <div class="looks" id="looks" role="radiogroup" aria-label="Pipeline"></div>
+      <label class="field">
+        <span data-i18n="params">Parameters</span>
+        <select id="paramsSel"></select>
+      </label>
+      <div class="row lutopts" id="lutOpts" hidden>
+        <label class="field">
+          <span data-i18n="colormap">Colour profile</span>
+          <select id="cmSel"></select>
+        </label>
+        <label class="field">
+          <span data-i18n="table">Table</span>
+          <select id="tableSel"></select>
+        </label>
+      </div>
+      <div class="cmimport" id="cmImport" hidden>
+        <label class="ghost" tabindex="0" id="cmImportBtn">
+          <input type="file" id="cmInput" hidden multiple accept=".xml">
+          <span data-i18n="cmImport">Import colour profiles…</span>
+        </label>
+        <p class="hint" data-i18n="cmImportHint">XML colour profiles, one per file. They are copied to data/colormaps/.</p>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2 data-i18n="curves">Channel curves</h2>
+      <svg class="plot" id="curves" viewBox="0 0 200 200" role="img" aria-label="Per-channel output curves"></svg>
+      <p class="hint" data-i18n="curvesHint">Output per channel, both axes in sRGB encoding.</p>
+      <div class="trim" id="trim"></div>
+    </section>
+
+    <section class="group">
+      <h2 data-i18n="histogram">Histogram</h2>
+      <canvas class="plot" id="hist" width="400" height="140" role="img" aria-label="RGB histogram of the rendered view"></canvas>
+    </section>
+
+    <section class="group">
+      <h2 data-i18n="export">Export</h2>
+      <div class="row">
+        <label class="field">
+          <span data-i18n="format">Format</span>
+          <select id="fmtSel">
+            <option value="jpg" data-i18n="fmtJpg">JPEG · 8-bit</option>
+            <option value="tif" data-i18n="fmtTif">TIFF · 16-bit</option>
+            <option value="tif8" data-i18n="fmtTif8">TIFF · 8-bit</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="profile">Colour space</span>
+          <select id="profileSel">
+            <option value="srgb">sRGB</option>
+            <option value="adobe">Adobe RGB (1998)</option>
+            <option value="p3">Display P3</option>
+            <option value="pq">BT.2100 PQ</option>
+          </select>
+        </label>
+      </div>
+      <label class="check">
+        <input type="checkbox" id="hdr">
+        <span data-i18n="hdr">HDR (gain curve, BT.2100 PQ)</span>
+      </label>
+      <button class="primary" id="exportBtn" type="button" disabled data-i18n="exportBtn">Export full image</button>
+      <p class="hint" id="exportNote"></p>
+    </section>
+
+    <section class="group">
+      <p class="hint keys" data-i18n="keys">Keys: 1–4 look · Y split · \ look / base · E export</p>
+    </section>
+  </aside>
+
+  <main class="view" id="view">
+    <div class="stage" id="stage">
+      <div class="empty" id="empty">
+        <p data-i18n="emptyTitle">Open a photo to start</p>
+        <p class="hint" data-i18n="emptyBody">Drop a raw file anywhere on this window. Changing the look re-renders the preview; Export renders the full image.</p>
+      </div>
+      <div class="frame" id="frame" hidden>
+        <img id="imgBefore" alt="">
+        <img id="imgAfter" alt="">
+        <div class="split" id="split" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-label="Compare split">
+          <span class="split-tag left" data-i18n="tagBase">Base</span>
+          <span class="split-tag right" data-i18n="tagLook">Look</span>
+        </div>
+      </div>
+      <div class="busy" id="busy" hidden><span id="busyText"></span></div>
+    </div>
+    <div class="viewbar">
+      <div class="seg" role="radiogroup" aria-label="View mode" id="modeSeg">
+        <button type="button" data-mode="split" aria-checked="true" role="radio" data-i18n="modeSplit">Split</button>
+        <button type="button" data-mode="after" aria-checked="false" role="radio" data-i18n="modeLook">Look</button>
+        <button type="button" data-mode="before" aria-checked="false" role="radio" data-i18n="modeBase">Base</button>
+      </div>
+      <p class="hint" data-i18n="baseHint">Base is the camera matrix only, with no look applied.</p>
+      <div class="probe" id="probe" hidden aria-live="off">
+        <span class="probe-h" data-i18n="probe">sRGB 8-bit</span>
+        <span class="probe-row" id="probe-before"><span class="sw"></span><span data-i18n="tagBase">Base</span><span class="pv"></span></span>
+        <span class="probe-row" id="probe-after"><span class="sw"></span><span data-i18n="tagLook">Look</span><span class="pv"></span></span>
+      </div>
+    </div>
+    <ol class="stages" id="stages" aria-label="Pipeline stages"></ol>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </main>
+</div>
+<div class="dropveil" id="dropveil" hidden><p data-i18n="dropVeil">Drop to open</p></div>
+<script src="app.js"></script>
+</body>
+</html>
