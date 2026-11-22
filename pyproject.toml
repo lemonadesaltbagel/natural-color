@@ -16,8 +16,14 @@ dependencies = [
   "rawpy>=0.19",
 ]
 
+[project.optional-dependencies]
+app = ["pywebview>=5"]
+
 [project.scripts]
 naturalcolor = "naturalcolor.cli:main"
+
+[project.gui-scripts]
+natural-color = "naturalcolor.app:main"
 
 [tool.setuptools.packages.find]
 include = ["naturalcolor*"]

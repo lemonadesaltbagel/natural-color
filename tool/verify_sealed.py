@@ -36,7 +36,6 @@ RENDERS = [
     ("camera-0044", ["--pipeline", "camera", "--params", "params/0044.json"], "jpg"),
     ("camera-0125", ["--pipeline", "camera", "--params", "params/0125.json"], "jpg"),
     ("studio-0044", ["--pipeline", "studio", "--params", "params/post_0044.json"], "jpg"),
-    ("portable", ["--pipeline", "portable", "--params", "params/0125.json"], "jpg"),
     ("hdr", ["--pipeline", "studio", "--params", "params/post_0044.json", "--hdr"], "jpg"),
     ("adobe16", ["--pipeline", "studio", "--params", "params/post_0044.json",
                  "--profile", "adobe", "--bits", "16"], "tif"),

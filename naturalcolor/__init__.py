@@ -3,8 +3,8 @@
 Architecture (each stage is a pure function, parameters are explicit):
 
     naturalcolor.io      raw loading, CFA demosaic, image container
-    naturalcolor.color   matrices, colour engine, 3D LUT, tone curve, output profiles
-    naturalcolor.model   three pipelines: camera, studio, portable (+ HDR)
+    naturalcolor.color   matrices, white balance, colour engine, curves, output profiles
+    naturalcolor.model   two looks: camera and studio (+ HDR rendition)
     naturalcolor.calibrate curve / look fitting against a target render
     naturalcolor.cli     command line entry point
 

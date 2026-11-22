@@ -23,7 +23,11 @@ def _predict(a):
 
 
 def write_rgb(path, rgb, icc=None, compress=True, software="Natural Color", level=6):
-    """rgb: HxWx3 uint8 or uint16 array."""
+    """rgb: HxWx3 uint8 or uint16 array.
+
+    Streams to disk: strips are written as they come back from the compressor
+    pool, so the file never exists twice in memory.
+    """
     a = np.ascontiguousarray(rgb)
     if a.ndim != 3 or a.shape[2] != 3 or a.dtype not in (np.uint8, np.uint16):
         raise ValueError(f"expected HxWx3 uint8/uint16, got {a.shape} {a.dtype}")
@@ -32,35 +36,6 @@ def write_rgb(path, rgb, icc=None, compress=True, software="Natural Color", leve
     bits = a.dtype.itemsize * 8
     rows = max(1, STRIP_BYTES // (w * 3 * a.dtype.itemsize))
     bands = [a[y:y + rows] for y in range(0, h, rows)]
-    if compress:
-        with ThreadPoolExecutor() as pool:
-            strips = list(pool.map(lambda b: zlib.compress(_predict(b).tobytes(), level), bands))
-    else:
-        strips = [b.tobytes() for b in bands]
-
-    # layout: header | strips | out-of-line tag values | IFD
-    out = bytearray(b"II*\0\0\0\0\0")
-    offsets = []
-    for s in strips:
-        offsets.append(len(out))
-        out += s
-        if len(out) % 2:
-            out += b"\0"
-
-    tags = [
-        (256, LONG, [w]), (257, LONG, [h]), (258, SHORT, [bits] * 3),
-        (259, SHORT, [8 if compress else 1]), (262, SHORT, [2]),
-        (273, LONG, offsets), (277, SHORT, [3]), (278, LONG, [rows]),
-        (279, LONG, [len(s) for s in strips]),
-        (282, RATIONAL, [(300, 1)]), (283, RATIONAL, [(300, 1)]),
-        (284, SHORT, [1]), (296, SHORT, [2]),
-        (305, ASCII, software.encode("ascii") + b"\0"),
-    ]
-    if compress:
-        tags.append((317, SHORT, [2]))
-    tags.append((339, SHORT, [1] * 3))
-    if icc:
-        tags.append((34675, UNDEFINED, bytes(icc)))
 
     def pack(typ, vals):
         if typ in (ASCII, UNDEFINED):
@@ -69,24 +44,61 @@ def write_rgb(path, rgb, icc=None, compress=True, software="Natural Color", leve
             return b"".join(struct.pack("<II", *v) for v in vals)
         return struct.pack("<%d%s" % (len(vals), "H" if typ == SHORT else "I"), *vals)
 
-    entries = []
-    for tag, typ, vals in tags:
-        data = pack(typ, vals)
-        count = len(data) // _SIZE[typ]
-        if len(data) <= 4:
-            entries.append(struct.pack("<HHI", tag, typ, count) + data.ljust(4, b"\0"))
-        else:
-            entries.append(struct.pack("<HHII", tag, typ, count, len(out)))
-            out += data
-            if len(out) % 2:
-                out += b"\0"
-    ifd = len(out)
-    if ifd >= 1 << 32:
-        raise ValueError("image too large for a classic TIFF (4 GB)")
-    out += struct.pack("<H", len(entries)) + b"".join(entries) + struct.pack("<I", 0)
-    out[4:8] = struct.pack("<I", ifd)
+    # layout: header | strips | out-of-line tag values | IFD
     with open(path, "wb") as f:
-        f.write(out)
+        f.write(b"II*\0\0\0\0\0")
+        pos, offsets, counts = 8, [], []
+
+        def put(data):
+            nonlocal pos
+            f.write(data)
+            pos += len(data)
+            if pos % 2:
+                f.write(b"\0")
+                pos += 1
+
+        def strips():
+            if not compress:
+                yield from (b.tobytes() for b in bands)
+                return
+            with ThreadPoolExecutor() as pool:
+                yield from pool.map(lambda b: zlib.compress(_predict(b).tobytes(), level), bands)
+
+        for s_ in strips():
+            offsets.append(pos)
+            counts.append(len(s_))
+            put(s_)
+
+        tags = [
+            (256, LONG, [w]), (257, LONG, [h]), (258, SHORT, [bits] * 3),
+            (259, SHORT, [8 if compress else 1]), (262, SHORT, [2]),
+            (273, LONG, offsets), (277, SHORT, [3]), (278, LONG, [rows]),
+            (279, LONG, counts),
+            (282, RATIONAL, [(300, 1)]), (283, RATIONAL, [(300, 1)]),
+            (284, SHORT, [1]), (296, SHORT, [2]),
+            (305, ASCII, software.encode("ascii") + b"\0"),
+        ]
+        if compress:
+            tags.append((317, SHORT, [2]))
+        tags.append((339, SHORT, [1] * 3))
+        if icc:
+            tags.append((34675, UNDEFINED, bytes(icc)))
+
+        entries = []
+        for tag, typ, vals in tags:
+            data = pack(typ, vals)
+            count = len(data) // _SIZE[typ]
+            if len(data) <= 4:
+                entries.append(struct.pack("<HHI", tag, typ, count) + data.ljust(4, b"\0"))
+            else:
+                entries.append(struct.pack("<HHII", tag, typ, count, pos))
+                put(data)
+        ifd = pos
+        if ifd >= 1 << 32:
+            raise ValueError("image too large for a classic TIFF (4 GB)")
+        f.write(struct.pack("<H", len(entries)) + b"".join(entries) + struct.pack("<I", 0))
+        f.seek(4)
+        f.write(struct.pack("<I", ifd))
 
 
 def read_rgb(path):

@@ -33,14 +33,19 @@ def read_raw(path) -> tuple[np.ndarray, RawMeta]:
         h, w = mosaic.shape
         crop = _crop(raw.sizes, path, w, h)
         xyz_cam = np.asarray(raw.rgb_xyz_matrix, dtype=np.float64)[:3].copy()
-    idx = np.tile(pat, (h//2 + 1, w//2 + 1))[:h, :w]
-    bl = np.zeros_like(mosaic)
-    for k, v in enumerate(black):
-        bl[idx == k] = v
-    mosaic = (mosaic - bl) / max(white - float(black.mean()), 1.0)
+    # per-CFA-position black, subtracted on each of the four 2x2 phases in place
+    scale = max(white - float(black.mean()), 1.0)
+    for py in range(2):
+        for px in range(2):
+            k = int(pat[py, px])
+            v = black[k] if k < len(black) else 0.0
+            phase = mosaic[py::2, px::2]
+            np.subtract(phase, v, out=phase)
+            np.divide(phase, scale, out=phase)
     meta = RawMeta(pattern=pat, black=black, white=white, wb=wb, flip=flip,
                    width=w, height=h, crop=crop, xyz_cam=xyz_cam)
-    return np.clip(mosaic, 0, None), meta
+    np.clip(mosaic, 0, None, out=mosaic)      # in place: no second full-size mosaic
+    return mosaic, meta
 
 
 def _crop(sizes, path, w, h):

@@ -3,6 +3,8 @@
     load_camera raw / image file -> white-balanced camera RGB (crop, demosaic) + info
     develop     camera RGB -> linear sRGB base (white balance, matrix, exposure)
     load_base   load_camera + develop
+    export      camera RGB -> file in one banded pass (develop, look, encode,
+                quantise): no full-size floating-point intermediates
     apply_look  base -> display-linear Image for one pipeline
     encode      display-linear -> output code values 0..1
     save        code values -> JPEG / TIFF on disk, tagged with the output's ICC profile
@@ -12,10 +14,12 @@ from pathlib import Path
 
 import numpy as np
 
+from . import parallel
+from .io.image import Image
 from .paths import PARAMS
 from .vault import data as vdata
 
-PIPELINES = ("camera", "studio", "studio-lut", "portable")
+PIPELINES = ("camera", "studio")
 PROFILES = ("srgb", "adobe", "p3", "pq")
 IMAGE_EXT = (".tif", ".tiff", ".jpg", ".jpeg", ".png")
 
@@ -38,8 +42,7 @@ def resolve_params(p):
 
 
 def default_params(pipeline):
-    return {"camera": "0125.json", "portable": "0125.json",
-            "studio": "post_0125.json", "studio-lut": "post_lut_0125.json"}[pipeline]
+    return {"camera": "0125.json", "studio": "post_0125.json"}[pipeline]
 
 
 def load_input(path, demosaic="ours", half=True):
@@ -107,13 +110,24 @@ def develop(cam, info, exposure=0.0, wb=None):
     camera would, so every later stage sees it as part of the capture.
     exposure: EV on top of the file's BaselineExposure, linear and before the look.
     """
-    x = cam
+    return parallel.map_rows(_develop_fn(info, exposure, wb), cam)
+
+
+def _develop_fn(info, exposure=0.0, wb=None):
+    """The develop step as a per-pixel function of camera RGB."""
+    gains = None
     if wb is not None:
         if info.get("wb") is None:
             raise ValueError("white balance can only be set on a raw file")
-        x = cam * info["wb"].gains(*wb)
+        gains = info["wb"].gains(*wb)
     gain = info["exposure_gain"] * 2.0 ** float(exposure)
-    return np.clip(x @ info["matrix"].T, 0, None) * gain
+    M = info["matrix"]
+
+    def band(c):
+        x = c if gains is None else c * gains
+        return np.clip(x @ M.T, 0, None) * gain
+
+    return band
 
 
 def load_base(path, demosaic="ours", half=True, exposure=0.0, wb=None):
@@ -133,44 +147,48 @@ def core_available() -> bool:
     return available()
 
 
-def apply_look(base, pipeline="camera", params=None, colormap=None, table=None):
-    """Linear sRGB base -> display-linear Image for the chosen pipeline.
+def apply_look(base, pipeline="camera", params=None):
+    """Linear sRGB base -> display-linear Image for the chosen look.
 
-    colormap / table pick the colour profile and CbCr table for studio-lut.
+    Every look is per pixel, so large images are rendered in parallel row bands.
     """
+    look = _look(pipeline, params)
+    meta = look(base[:1, :1]).meta
+    return Image(parallel.map_rows(lambda b: look(b).rgb, base), meta)
+
+
+def _look(pipeline, params):
+    """The chosen look as a function base -> Image."""
     from .core_api import require_core
 
     require_core()                      # one clear message when the core is absent
     from .model.camera import CameraModel
     from .model.post import PostModel
-    from .model.portable import PortableLook
+    if pipeline not in PIPELINES:
+        raise ValueError(f"unknown look {pipeline!r}; choose from {', '.join(PIPELINES)}")
     p = resolve_params(params or default_params(pipeline))
     if pipeline == "camera":
-        return CameraModel(p).render(base)
-    if pipeline in ("studio", "studio-lut"):
-        from .color import lut3d
-        key = "mt" if "0044" in p.name else "mf"
-        mode = "calibrated" if pipeline == "studio" else "extracted"
-        model = PostModel(p, key=key, colormap=colormap or lut3d.default_colormap(),
-                          table=table or lut3d.DEFAULT_TABLE)
-        return model.render(base, mode=mode)
-    if pipeline == "portable":
-        model = CameraModel(p)
-        look = PortableLook(type("L", (), {"apply": staticmethod(model.apply)})())
-        return look.render(np.clip(base, 0, None))
-    raise ValueError(f"unknown pipeline {pipeline!r}")
+        return CameraModel(p).render
+    return PostModel(p).render
 
 
 def encode(rgb, profile=None, hdr=False):
     """Display-linear sRGB -> (code values 0..1, profile name)."""
+    fn, profile = _encoder(profile, hdr)
+    return parallel.map_rows(fn, rgb), profile
+
+
+def _encoder(profile=None, hdr=False):
+    """(per-pixel encoder display-linear -> code values, profile name)."""
     from .color import profiles
     from .model.hdr import HDRRendition
     profile = "pq" if hdr else (profile or "srgb")
     if hdr:
-        return profiles.encode_pq(HDRRendition().expand(rgb)), profile
+        r = HDRRendition()
+        return (lambda b: profiles.encode_pq(r.expand(b))), profile
     if profile == "pq":
-        return profiles.encode_pq(rgb), profile
-    return profiles.ENCODERS[profile](rgb), profile
+        return profiles.encode_pq, profile
+    return profiles.ENCODERS[profile], profile
 
 
 def to_u8(code):
@@ -185,19 +203,47 @@ def is_tiff(output):
     return str(output).lower().endswith((".tif", ".tiff"))
 
 
+def _quantizer(output, bits=16):
+    """JPEG is always 8-bit; TIFF is `bits` per channel."""
+    return to_u16 if is_tiff(output) and bits == 16 else to_u8
+
+
 def save(code, output, profile="srgb", bits=16):
     """Write code values with the profile's ICC embedded; returns the array written.
 
     JPEG is always 8-bit (quality 94); TIFF is `bits` per channel, Deflate compressed.
     """
+    arr = _quantizer(output, bits)(code)
+    write(arr, output, profile)
+    return arr
+
+
+def write(arr, output, profile="srgb"):
+    """Write an already quantised uint8/uint16 image with the profile's ICC embedded."""
     from .color.icc import for_profile
     icc = for_profile(profile)
     if is_tiff(output):
         from .io.tiff import write_rgb
-        arr = to_u16(code) if bits == 16 else to_u8(code)
         write_rgb(output, arr, icc=icc)
-        return arr
+        return
     from PIL import Image as PILImage
-    arr = to_u8(code)
     PILImage.fromarray(arr).save(output, quality=94, icc_profile=icc)
-    return arr
+
+
+def export(cam, info, output, pipeline="camera", params=None,
+           exposure=0.0, wb=None, profile=None, hdr=False, bits=16):
+    """Camera RGB -> image file, every stage fused per row band.
+
+    The same arithmetic as develop -> apply_look -> encode -> save, so the file
+    is bit-identical, but only the final 8/16-bit image is ever full size: no
+    floating-point base, look or code-value image is allocated for the frame.
+    Returns (array written, profile name).
+    """
+    dev = _develop_fn(info, exposure, wb)
+    look = _look(pipeline, params)
+    enc, profile = _encoder(profile, hdr)
+    quant = _quantizer(output, bits)
+    fn = lambda c: quant(enc(look(dev(c)).rgb))
+    arr = parallel.map_rows(fn, cam)
+    write(arr, output, profile)
+    return arr, profile

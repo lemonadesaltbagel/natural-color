@@ -9,7 +9,7 @@
 naturalcolor/color/*.py   ──┐
 naturalcolor/model/*.py     │  CI: 检出 → ncseal build → 闸门 → 上传
 params/*.json               │        │
-data/gradation.bin        ──┘        ▼
+data/gain_curves.json     ──┘        ▼
                               natural-color-v2.0.tar.gz
                               （只有 .ncs 密文 + 框架）
                                      │
@@ -109,3 +109,31 @@ gh repo deploy-key add /tmp/core_deploy.pub -R <owner>/natural-color-core --titl
 gh secret set CORE_DEPLOY_KEY -R <owner>/natural-color < /tmp/core_deploy
 rm -f /tmp/core_deploy /tmp/core_deploy.pub      # 私钥只留在 secret 里
 ```
+
+## 桌面应用（.dmg / .exe）
+
+同一个 tag 还会构建桌面应用：`apps` 任务在 macOS（Apple Silicon）和 Windows 上各自
+注入核心，用 **embedded 模式、每次随机生成的密钥** 加密，然后 `tool/build_app.py`
+用 PyInstaller 打包。加密树以普通文件随包分发，由 vault 的导入钩子在内存里解密；
+PyInstaller 只读明文源码来找依赖，打包前再把 `naturalcolor` 的字节码全部剔除。
+
+`build_app.py` 在以下任一情况下拒绝产出：
+
+* 加密树不是 embedded 模式，或 `color/`、`model/` 下还有明文
+* 冻结的 PYZ 里出现任何 `naturalcolor` 模块
+* 打包好的应用跑 `--selftest` 失败（全部观感 × 编码，经过加密核心）
+
+本地构建（macOS 示例）：
+
+```bash
+pip install pyinstaller pywebview
+python tool/ncseal.py build --out dist/app/natural-color --data --key-mode embedded
+python tool/build_app.py --sealed dist/app/natural-color --version 2.1.0
+# -> dist/app/Natural-Color-2.1.0-macOS-arm64.dmg
+```
+
+应用未签名：macOS 首次打开需右键 › 打开（Gatekeeper），Windows 可能出现 SmartScreen
+提示。有了 Apple Developer ID / Windows 代码签名证书后，在 `apps` 任务里加签名与公证即可。
+
+embedded 模式的含义见 `docs/PROTECT.md` 的威胁模型：应用里带着密钥，挡得住"读源码"，
+挡不住有动机的逆向。它与 external 发布包使用不同的密钥。

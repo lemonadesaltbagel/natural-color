@@ -1,7 +1,7 @@
 # 色彩核心算法加密（NCVault）
 
 把 `naturalcolor/color/`、`naturalcolor/model/` 与 `naturalcolor/io/{demosaic,denoise}.py` 的源码、以及 `params/` + `data/`
-里的标定数据（含 `build/iq.pkl`，若存在）替换成 **经过认证加密的密文**：分发出去的目录里再也找不到算法源码，
+里的标定数据替换成 **经过认证加密的密文**：分发出去的目录里再也找不到算法源码，
 但程序行为与明文树逐字节一致。
 
 ```
@@ -70,7 +70,7 @@ python -m naturalcolor render --input photo.raw --output out.jpg \
 | 密钥派生 | HKDF-SHA256（RFC 5869），每个文件独立子密钥 |
 | 子密钥输入 | `master [+ 主机指纹]`，`salt` 每文件随机 16 字节，`info = "ncvault/1|mod|naturalcolor.color.engine"` |
 | 关联数据（AAD） | 整个文件头 + 逻辑名 + 类型。把 `engine.ncs` 改名成 `curves.ncs`、或把 params 冒充模块，都会**验签失败** |
-| 压缩 | 先 zlib（-9）再加密：`gradation.bin` 262 KB → 56 KB，`params/*.json` 24 KB → 7 KB |
+| 压缩 | 先 zlib（-9）再加密：`params/*.json` 24 KB → 7 KB |
 | 随机数 | `os.urandom`，每次构建 salt/nonce 全部重新生成 |
 | 完整性 | `manifest.json` 记录每个载荷的 SHA-256；`verify()` 可离线校验 |
 
@@ -138,8 +138,8 @@ python -c "from naturalcolor.model.post import PostParams; PostParams(trim=None)
 ls params/post_0099.json*        # -> post_0099.json.ncs（没有明文）
 ```
 
-`python -m naturalcolor verify` 现在也能在加密树里看见 `post_lut_*.json`
-（之前 `Path(...).exists()` 恒为 False，会把 studio-lut 那一行静默跳过）。
+`python -m naturalcolor verify` 用 `vault.data` 判断参数文件是否存在，所以在加密树里
+同样能找到 `params/*.json.ncs`（直接用 `Path(...).exists()` 会恒为 False）。
 
 * **`__pycache__` 不要进包**。`build` 已忽略；如果手工拷贝，记得删掉，
   否则可能留下某个未加密模块的旧字节码。

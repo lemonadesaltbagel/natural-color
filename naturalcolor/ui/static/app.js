@@ -14,16 +14,14 @@ const T = {
     tagBase: "Base", tagLook: "Look", modeSplit: "Split", modeLook: "Look", modeBase: "Base",
     baseHint: "Base is the camera matrix only, with no look applied.",
     dropVeil: "Drop to open",
-    "pl.camera": "Camera", "pl.studio": "Studio", "pl.studio-lut": "Studio LUT", "pl.portable": "Portable",
+    "pl.camera": "Camera", "pl.studio": "Studio",
     "pd.camera": "In-camera colour, matched to the camera's own JPEG",
     "pd.studio": "Studio processor colour with calibrated curves",
-    "pd.studio-lut": "Studio colour rebuilt as a 3D LUT from colour profiles",
-    "pd.portable": "The in-camera look on any camera's raw, greys kept neutral",
-    "na.colormaps": "Needs colour profiles in data/colormaps/",
+    "na.core": "Needs the colour core (sealed build + key)",
     "scene.0044": "warm light scene",
     "st.black": "Black level", "st.wb": "White balance", "st.demosaic": "Demosaic",
     "st.matrix": "Camera matrix", "st.trim": "3×3 trim", "st.engine": "Colour engine",
-    "st.lut": "3D LUT", "st.curves": "Channel curves", "st.neutral": "Neutral hold",
+    "st.curves": "Channel curves",
     "st.encode": "Encode",
     size: "Size", wb: "WB gains", black: "Black", white: "White", source: "Source",
     srcRaw: "raw (demosaiced here)", srcImg: "image, read as sRGB",
@@ -33,17 +31,9 @@ const T = {
     exported: (n, s) => `Exported ${n} in ${s} s.`,
     noCurves: "This parameter file has no channel curves.",
     failed: "Failed", serverDown: "The server is not responding. Check that python -m naturalcolor ui is still running.",
-    probe: "sRGB 8-bit", keys: "Keys: 1–4 look · Y split · \\ look / base · E export",
+    probe: "sRGB 8-bit", keys: "Keys: 1–2 look · Y split · \\ look / base · E export",
     embedded: (p, f) => `Writes ${f} with the ${p} ICC profile embedded. The preview is always shown in sRGB.`,
     fmtJpg: "JPEG · 8-bit", fmtTif: "TIFF · 16-bit", fmtTif8: "TIFF · 8-bit",
-    colormap: "Colour profile", table: "Table", cmDefault: "calibrated",
-    "tb.LUTTableTSStd": "TS · Standard", "tb.LUTTableTSRepro": "TS · Reproduction",
-    "tb.LUTTableFlashStd": "Flash · Standard", "tb.LUTTableFlashRepro": "Flash · Reproduction",
-    cmImport: "Import colour profiles…",
-    cmImportHint: "XML colour profiles, one per file. They are copied to data/colormaps/.",
-    importing: "Importing colour profiles",
-    imported: (n) => `Imported ${n} colour profile${n === 1 ? "" : "s"}.`,
-    importFailed: (names) => `Not imported: ${names}`,
     develop: "Capture settings", exposure: "Exposure", wbTitle: "White balance",
     temp: "Temperature", tint: "Tint", asShot: "As shot", wbPick: "Pick grey",
     tintGreen: "green", tintMagenta: "magenta",
@@ -66,16 +56,14 @@ const T = {
     tagBase: "基础", tagLook: "观感", modeSplit: "对比", modeLook: "观感", modeBase: "基础",
     baseHint: "基础图只经过相机矩阵，未施加观感。",
     dropVeil: "松开以打开",
-    "pl.camera": "相机", "pl.studio": "工作室", "pl.studio-lut": "工作室 LUT", "pl.portable": "跨机型",
+    "pl.camera": "相机", "pl.studio": "工作室",
     "pd.camera": "相机原生色彩，对齐机内 JPEG",
     "pd.studio": "工作室后期色彩，标定曲线",
-    "pd.studio-lut": "由色彩配置文件重建 3D LUT 的工作室色彩",
-    "pd.portable": "把机内观感用于任意相机的 RAW，保持中性灰",
-    "na.colormaps": "需要在 data/colormaps/ 中放入色彩配置文件",
+    "na.core": "需要色彩核心（加密构建 + 密钥）",
     "scene.0044": "暖光场景",
     "st.black": "黑电平", "st.wb": "白平衡", "st.demosaic": "去马赛克",
     "st.matrix": "相机矩阵", "st.trim": "3×3 微调", "st.engine": "色彩引擎",
-    "st.lut": "3D LUT", "st.curves": "逐通道曲线", "st.neutral": "中性保持",
+    "st.curves": "逐通道曲线",
     "st.encode": "输出编码",
     size: "尺寸", wb: "白平衡增益", black: "黑电平", white: "白电平", source: "来源",
     srcRaw: "RAW（本地去马赛克）", srcImg: "图像，按 sRGB 读取",
@@ -85,17 +73,9 @@ const T = {
     exported: (n, s) => `已导出 ${n}，用时 ${s} 秒。`,
     noCurves: "该参数文件没有逐通道曲线。",
     failed: "失败", serverDown: "服务器没有响应，请确认 python -m naturalcolor ui 仍在运行。",
-    probe: "sRGB 8 位", keys: "快捷键：1–4 观感 · Y 对比 · \\ 观感 / 基础 · E 导出",
+    probe: "sRGB 8 位", keys: "快捷键：1–2 观感 · Y 对比 · \\ 观感 / 基础 · E 导出",
     embedded: (p, f) => `导出 ${f}，内嵌 ${p} ICC 配置文件。预览始终以 sRGB 显示。`,
     fmtJpg: "JPEG · 8 位", fmtTif: "TIFF · 16 位", fmtTif8: "TIFF · 8 位",
-    colormap: "色彩配置文件", table: "色表", cmDefault: "已标定",
-    "tb.LUTTableTSStd": "TS · 标准", "tb.LUTTableTSRepro": "TS · 还原",
-    "tb.LUTTableFlashStd": "闪光 · 标准", "tb.LUTTableFlashRepro": "闪光 · 还原",
-    cmImport: "导入色彩配置文件…",
-    cmImportHint: "XML 色彩配置文件，每个文件一组，会复制到 data/colormaps/。",
-    importing: "正在导入色彩配置文件",
-    imported: (n) => `已导入 ${n} 个色彩配置文件。`,
-    importFailed: (names) => `未导入：${names}`,
     develop: "拍摄设置", exposure: "曝光", wbTitle: "白平衡",
     temp: "色温", tint: "色调", asShot: "原始设置", wbPick: "取灰点",
     tintGreen: "偏绿", tintMagenta: "偏品红",
@@ -108,12 +88,12 @@ const T = {
 };
 const PROFILE_NAMES = { srgb: "sRGB", adobe: "Adobe RGB", p3: "Display P3", pq: "PQ" };
 const ICC_NAMES = { srgb: "sRGB IEC61966-2.1", adobe: "Adobe RGB (1998)", p3: "Display P3", pq: "BT.2100 PQ" };
-const STAGES = ["black", "wb", "demosaic", "matrix", "exposure", "trim", "engine", "lut", "curves", "neutral", "encode"];
+const STAGES = ["black", "wb", "demosaic", "matrix", "exposure", "trim", "engine", "curves", "encode"];
 
 const $ = (id) => document.getElementById(id);
 const state = {
   lang: pickLang(), options: null, session: null,
-  pipeline: "camera", params: null, colormap: null, table: null,
+  pipeline: "camera", params: null,
   info: {}, mode: "split", split: 50, seq: 0, busyTimer: 0,
   // capture settings, applied to the raw before the look; wb null = as shot
   dev: { ev: 0, wb: null }, picking: false, devTimer: 0,
@@ -129,7 +109,7 @@ function applyLang() {
   document.documentElement.lang = state.lang === "zh" ? "zh-CN" : "en";
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   $("langBtn").textContent = state.lang === "zh" ? "English" : "中文";
-  if (state.options) { buildLooks(); buildParams(); buildLutOpts(); }
+  if (state.options) { buildLooks(); buildParams(); }
   renderMeta(); renderStages(); renderExportNote(); syncDevelop();
 }
 
@@ -176,49 +156,11 @@ function buildLooks() {
   }
 }
 
-function buildLutOpts() {
-  const o = state.options, lut = state.pipeline === "studio-lut";
-  $("lutOpts").hidden = !lut || !o.colormaps.length;
-  $("cmImport").hidden = !(lut || o.unavailable["studio-lut"]);
-  if (!o.colormaps.includes(state.colormap)) state.colormap = o.default_colormap;
-  if (!o.tables.includes(state.table)) state.table = o.default_table;
-  const fill = (sel, items, label, value) => {
-    sel.textContent = "";
-    for (const v of items) {
-      const opt = document.createElement("option");
-      opt.value = v; opt.textContent = label(v);
-      sel.appendChild(opt);
-    }
-    sel.value = value;
-  };
-  fill($("cmSel"), o.colormaps, (n) => n === o.default_colormap ? `${n} (${t("cmDefault")})` : n, state.colormap);
-  fill($("tableSel"), o.tables, (n) => t("tb." + n), state.table);
-}
 
-async function importColormaps(files) {
-  if (!files.length) return;
-  busy(t("importing")); status("");
-  const bad = [];
-  let ok = 0;
-  for (const f of files) {
-    try {
-      state.options = await (await api("/api/colormaps", {
-        method: "POST", body: f, headers: { "X-Filename": encodeURIComponent(f.name) },
-      })).json();
-      ok++;
-    } catch (e) { bad.push(`${f.name} (${e.message})`); }
-  }
-  busy("");
-  buildLooks(); buildLutOpts();
-  if (bad.length) status(t("importFailed", bad.join("; ")), true);
-  else status(t("imported", ok));
-  if (ok && state.pipeline === "studio-lut") renderLook();
-}
 
 function lookRequest() {
   const q = { id: state.session.id, pipeline: state.pipeline, params: state.params,
               exposure: state.dev.ev, wb: state.dev.wb };
-  if (state.pipeline === "studio-lut") Object.assign(q, { colormap: state.colormap, table: state.table });
   return q;
 }
 
@@ -241,7 +183,7 @@ async function setPipeline(p) {
   state.pipeline = p;
   const names = paramsFor(p).map((x) => x.name);
   if (!names.includes(state.params)) state.params = names.find((n) => n.includes("0125")) || names[0] || null;
-  buildLooks(); buildParams(); buildLutOpts();
+  buildLooks(); buildParams();
   await loadParamsInfo(); renderLook();
 }
 
@@ -342,11 +284,9 @@ function renderStages() {
   const prof = exportProfile();
   const on = {
     black: raw, wb: raw, demosaic: raw, matrix: raw, exposure: true,
-    trim: p !== "studio-lut" && !!info.trim,
-    engine: (p === "camera" || p === "portable") && !!(info.tone || info.chroma),
-    lut: p === "studio-lut",
+    trim: !!info.trim,
+    engine: p === "camera" && !!(info.tone || info.chroma),
     curves: !!(info.curves && info.curves.length),
-    neutral: p === "portable",
     encode: true,
   };
   const detail = {};
@@ -360,7 +300,6 @@ function renderStages() {
   }
   if (s) detail.exposure = `${signed((s.meta.baseline_ev || 0) + state.dev.ev, 2)} EV`;
   if (on.curves) detail.curves = "R G B";
-  if (on.lut && state.table) detail.lut = t("tb." + state.table);
   detail.encode = (hdr ? "HDR " : "") + PROFILE_NAMES[prof];
   for (const k of STAGES) {
     const li = document.createElement("li");
@@ -568,9 +507,35 @@ function initCompare() {
 }
 
 // ---- export ---------------------------------------------------------------
+// In the desktop app (pywebview) the file goes through the native save dialog
+// and the server writes it to that path; in a browser it is a download.
+const desktop = () => !!(window.pywebview && window.pywebview.api && window.pywebview.api.save_path);
+
+async function exportToPath() {
+  const hdr = $("hdr").checked;
+  const [format, bits] = FORMATS[$("fmtSel").value];
+  const stem = state.session.name.replace(/\.[^.]*$/, "");
+  const dest = await window.pywebview.api.save_path(`${stem}_${state.pipeline}_${exportProfile()}.${format}`);
+  if (!dest) return;                                 // dialog cancelled
+  busy(t("exporting"));
+  const token = await window.pywebview.api.token();
+  const r = await api("/api/export", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-App-Token": token },
+    body: JSON.stringify({ ...lookRequest(), profile: exportProfile(), hdr, format, bits, dest }),
+  });
+  const d = await r.json();
+  status(t("exported", d.name, d.seconds));
+}
+
 async function exportImage() {
   if (!state.session) return;
   const btn = $("exportBtn"); btn.disabled = true;
+  if (desktop()) {
+    try { await exportToPath(); }
+    catch (e) { status(`${t("failed")}: ${e.message}`, true); }
+    finally { busy(""); btn.disabled = !state.session; }
+    return;
+  }
   busy(t("exporting"));
   try {
     const hdr = $("hdr").checked;
@@ -637,10 +602,6 @@ async function init() {
     applyLang();
   });
   $("paramsSel").addEventListener("change", async (e) => { state.params = e.target.value; await loadParamsInfo(); renderLook(); });
-  $("cmSel").addEventListener("change", (e) => { state.colormap = e.target.value; renderLook(); });
-  $("tableSel").addEventListener("change", (e) => { state.table = e.target.value; renderStages(); renderLook(); });
-  $("cmInput").addEventListener("change", (e) => { importColormaps([...e.target.files]); e.target.value = ""; });
-  $("cmImportBtn").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("cmInput").click(); } });
   $("fullRes").addEventListener("change", reopen);
   const exportChanged = () => { $("profileSel").disabled = $("hdr").checked; renderStages(); renderExportNote(); };
   ["hdr", "profileSel", "fmtSel"].forEach((id) => $(id).addEventListener("change", exportChanged));
@@ -649,7 +610,7 @@ async function init() {
   try {
     state.options = await getJSON("/api/options");
     state.params = paramsFor(state.pipeline).map((x) => x.name).find((n) => n.includes("0125")) || null;
-    buildLooks(); buildParams(); buildLutOpts();
+    buildLooks(); buildParams();
     await loadParamsInfo();
     if (state.options.initial) await decode(() => api("/api/session/" + state.options.initial));
   } catch (e) { status(e.message, true); }

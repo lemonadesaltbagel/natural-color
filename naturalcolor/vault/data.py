@@ -1,4 +1,4 @@
-"""Transparent access to sealed data files (params, tone curve, gain curves).
+"""Transparent access to sealed data files (params, gain curves).
 
 Every reader falls back to a plain file when no sealed sibling exists, so the
 same code runs in a development tree and in a sealed build.

@@ -37,28 +37,21 @@ from naturalcolor.vault import open_blob, seal_blob    # noqa: E402
 PROTECTED = [
     "naturalcolor.color.engine",
     "naturalcolor.color.curves",
-    "naturalcolor.color.gradation",
     "naturalcolor.color.matrices",
     "naturalcolor.color.profiles",
-    "naturalcolor.color.camera_lut",
-    "naturalcolor.color.lut3d",
     "naturalcolor.color.icc",
     "naturalcolor.color.whitebalance",
     "naturalcolor.io.demosaic",
     "naturalcolor.io.denoise",
     "naturalcolor.model.camera",
     "naturalcolor.model.post",
-    "naturalcolor.model.portable",
     "naturalcolor.model.hdr",
 ]
 
 # Calibrated data is the other half of the algorithm.
 PROTECTED_DATA = [
     "params/*.json",
-    "data/gradation.bin",
     "data/gain_curves.json",
-    "data/working_space.json",
-    "build/iq.pkl",
 ]
 
 #: development-only material that must not ship in a release: it needs the

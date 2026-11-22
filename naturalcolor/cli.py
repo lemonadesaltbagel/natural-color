@@ -25,9 +25,6 @@ def main(argv=None):
     r.add_argument("--exposure", type=float, default=0.0, help="EV, on the raw before the look")
     r.add_argument("--temp", type=float, default=None, help="white balance K (raw only; default as shot)")
     r.add_argument("--tint", type=float, default=None, help="white balance tint, + = magenta (raw only)")
-    r.add_argument("--colormap", default=None, help="studio-lut colour profile name")
-    r.add_argument("--lut-table", default=None, help="studio-lut CbCr table, e.g. LUTTableTSRepro")
-    r.add_argument("--colormaps", default=None, help="directory of colour-profile XMLs")
 
     v = sub.add_parser("verify", help="run the validation suite")
     v.add_argument("--width", type=int, default=972)
@@ -40,7 +37,6 @@ def main(argv=None):
     u.add_argument("--host", default="127.0.0.1")
     u.add_argument("--port", type=int, default=8765)
     u.add_argument("--no-browser", action="store_true")
-    u.add_argument("--colormaps", default=None, help="directory of colour-profile XMLs")
 
     a = ap.parse_args(argv)
     from naturalcolor.core_api import CoreNotInstalled
@@ -53,10 +49,6 @@ def main(argv=None):
 
 
 def _run(a):
-    if getattr(a, "colormaps", None):
-        import os
-        from naturalcolor.paths import COLORMAPS_ENV
-        os.environ[COLORMAPS_ENV] = os.pathsep.join(filter(None, (a.colormaps, os.environ.get(COLORMAPS_ENV))))
     if a.cmd == "render":
         return _render(a)
     if a.cmd == "verify":
@@ -77,10 +69,8 @@ def _render(a):
             return 2
         shot_temp, shot_tint = info["wb"].as_shot()
         wb = (a.temp if a.temp is not None else shot_temp, a.tint if a.tint is not None else shot_tint)
-    base = render.develop(cam, info, exposure=a.exposure, wb=wb)
-    img = render.apply_look(base, a.pipeline, a.params, colormap=a.colormap, table=a.lut_table)
-    code, profile = render.encode(img.rgb, a.profile, hdr=a.hdr)
-    arr = render.save(code, a.output, profile, bits=a.bits)
+    arr, profile = render.export(cam, info, a.output, a.pipeline, a.params, exposure=a.exposure,
+                                 wb=wb, profile=a.profile, hdr=a.hdr, bits=a.bits)
     print(f"wrote {a.output} {arr.shape} {arr.dtype} ({a.pipeline}, {profile})")
     return 0
 

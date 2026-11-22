@@ -121,11 +121,86 @@ jobs:
           files: natural-color-*.tar.gz
           fail_on_unmatched_files: true
           body: |
-            Sealed colour core + framework.
+            **Desktop app** — download, open, use. No Python, no key.
 
-            Unpack over the framework tree, then either run it as-is (embedded
-            key) or supply the key:
+            * macOS (Apple Silicon): `Natural-Color-*-macOS-arm64.dmg`, drag the app to
+              Applications. The app is not signed yet: on first launch right-click it and
+              choose Open (or allow it under System Settings › Privacy & Security).
+            * Windows: `Natural-Color-*-Windows-x64.exe`. Unsigned: if SmartScreen warns,
+              choose More info › Run anyway.
+
+            **Python package** (`natural-color-*.tar.gz`): the framework with the sealed
+            colour core, for licensed use with a vault key:
 
                 export NATURALCOLOR_VAULT_KEY_FILE=/path/to/vault.key
+                python -m naturalcolor.core_api
 
-            Check what you have: `python -m naturalcolor.core_api`
+  # The desktop apps: a separate embedded-key build per platform, so the app runs
+  # without a key.  The key is random per build and never leaves the runner except
+  # inside the app; the core still ships as ciphertext only, and build_app refuses
+  # to package plaintext or an app that cannot render.
+  apps:
+    needs: sealed-release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pywebview
+
+      - name: gate the public tree
+        run: python tool/ci_gate.py --profile public --strict .
+
+      - name: inject the private core
+        env:
+          CORE_DEPLOY_KEY: ${{ secrets.CORE_DEPLOY_KEY }}
+          CORE_REPO: ${{ vars.CORE_REPO }}
+        run: |
+          set -eu
+          tmp="$(cygpath -u "$RUNNER_TEMP" 2>/dev/null || echo "$RUNNER_TEMP")"
+          key="$tmp/core_deploy_key"; known="$tmp/known_hosts"
+          trap 'rm -f "$key"' EXIT
+          (umask 077; printf '%s\n' "$CORE_DEPLOY_KEY" > "$key")
+          curl -fsSL https://api.github.com/meta \
+            | python -c "import json,sys; [print('github.com', k) for k in json.load(sys.stdin)['ssh_keys']]" > "$known"
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known -o StrictHostKeyChecking=yes" \
+            git clone --depth 1 "git@github.com:${CORE_REPO}.git" .core-src
+          cp -R .core-src/naturalcolor/. naturalcolor/
+          cp -R .core-src/params params
+          cp -R .core-src/data/. data/
+          rm -rf .core-src
+
+      - name: the core really is here
+        run: python tool/ci_gate.py --profile core .
+
+      - name: seal with an embedded key
+        run: python tool/ncseal.py build --out dist/app/natural-color --data --key-mode embedded
+
+      - name: gate the sealed tree
+        run: python tool/ci_gate.py --profile release --strict --require-embedded-key dist/app/natural-color
+
+      - name: build, self-test and package the app
+        run: python tool/build_app.py --sealed dist/app/natural-color --source . --version "${GITHUB_REF_NAME#v}" --out dist/app
+
+      - name: publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/app/Natural-Color-*.dmg
+            dist/app/Natural-Color-*.exe
+          fail_on_unmatched_files: false

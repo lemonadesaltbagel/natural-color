@@ -18,7 +18,7 @@ import numpy as np
 from .. import __version__, render
 from ..core_api import CoreNotInstalled
 from ..vault import VaultError
-from ..paths import CM_DIR, PARAMS
+from ..paths import PARAMS
 from ..vault import data as vaultdata
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -30,12 +30,8 @@ CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; c
 
 # ---- params ----------------------------------------------------------------
 def params_kind(name):
-    """Which pipelines a params file belongs to, from its file name."""
-    if name.startswith("post_lut_"):
-        return ["studio-lut"]
-    if name.startswith("post_"):
-        return ["studio"]
-    return ["camera", "portable"]
+    """Which look a params file belongs to, from its file name."""
+    return ["studio"] if name.startswith("post_") else ["camera"]
 
 
 def list_params():
@@ -77,10 +73,10 @@ class Session:
         self.preview = downscale(self.cam, PREVIEW_EDGE)       # camera space, not yet developed
         self.meta = describe(self.info, self.cam)
 
-    def base(self, q, preview=True):
-        """Linear sRGB base for a request's develop settings."""
+    def base(self, q):
+        """Linear sRGB preview base for a request's develop settings (export uses render.export)."""
         exposure, wb = develop_settings(q)
-        return render.develop(self.preview if preview else self.cam, self.info, exposure, wb)
+        return render.develop(self.preview, self.info, exposure, wb)
 
     def close(self):
         if self.owned:
@@ -95,6 +91,12 @@ class Session:
 SESSIONS: OrderedDict[str, Session] = OrderedDict()
 LOCK = threading.Lock()
 INITIAL: dict = {}              # {"id": ...} of a photo opened from the command line
+#: set by the desktop app: a per-launch secret that lets the window write an
+#: export straight to a path chosen in the native save dialog.  Only that window
+#: knows it (other pages cannot send the header without a CORS preflight, which
+#: this server never grants), so no web page can make the server write a file.
+APP: dict = {"token": None}
+EXPORT_EXT = {".jpg": "jpg", ".jpeg": "jpg", ".tif": "tif", ".tiff": "tif"}
 
 
 def add_session(s):
@@ -172,27 +174,10 @@ def jpeg_data_url(lin_srgb):
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
-def _lut3d():
-    """The colour core's 3D-LUT module, or None when the core is not installed."""
-    try:
-        from ..color import lut3d
-        return lut3d
-    except Exception:
-        return None
-
-
 def options():
-    lut3d = _lut3d()
-    cms = lut3d.list_colormaps() if lut3d else []
-    unavailable = {} if cms else {"studio-lut": "colormaps"}
-    if not render.core_available():
-        unavailable = {p: "core" for p in render.PIPELINES}
+    unavailable = {} if render.core_available() else {p: "core" for p in render.PIPELINES}
     return {"version": __version__, "pipelines": list(render.PIPELINES),
             "profiles": list(render.PROFILES), "params": list_params(),
-            "colormaps": cms,
-            "default_colormap": lut3d.default_colormap() if lut3d else None,
-            "tables": list(lut3d.TABLES) if lut3d else [],
-            "default_table": lut3d.DEFAULT_TABLE if lut3d else None,
             "unavailable": unavailable,
             "initial": INITIAL.get("id") if INITIAL.get("id") in SESSIONS else None}
 
@@ -227,6 +212,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": str(e)})
         except LookupError as e:
             self._send(404, {"error": str(e)})
+        except PermissionError as e:
+            self._send(403, {"error": str(e)})
         except (CoreNotInstalled, VaultError) as e:     # no core, no key, or a tampered build
             self._send(503, {"error": str(e)})
         except FileNotFoundError as e:
@@ -255,8 +242,7 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         handler = {"/api/open": self.open_file, "/api/reopen": self.reopen,
                    "/api/render": self.render_look, "/api/export": self.export,
-                   "/api/wb/pick": self.pick_wb,
-                   "/api/colormaps": self.import_colormap}.get(route)
+                   "/api/wb/pick": self.pick_wb}.get(route)
         if handler is None:
             return self._send(404, {"error": "not found"})
         self._guard(handler)
@@ -297,31 +283,13 @@ class Handler(BaseHTTPRequestHandler):
         add_session(s)
         self._send(200, s.payload())
 
-    # POST /api/colormaps  body = one colour-profile XML, X-Filename
-    def import_colormap(self):
-        name = Path(unquote(self.headers.get("X-Filename") or "")).stem
-        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name):
-            raise ValueError(f"unusable colour-profile file name {name!r}")
-        n = int(self.headers.get("Content-Length") or 0)
-        if n > 64 << 20:
-            raise ValueError("colour-profile file is too large")
-        data = self.rfile.read(n)
-        lut3d = _lut3d()
-        if lut3d is None:
-            raise RuntimeError("the colour core is not installed: colour profiles cannot be validated")
-        lut3d.parse_colormap(data)              # reject anything that is not a usable profile
-        CM_DIR.mkdir(parents=True, exist_ok=True)
-        (CM_DIR / f"{name}.xml").write_bytes(data)
-        self._send(200, options())
-
-    # POST /api/render  {id, pipeline, params, colormap?, table?, exposure?, wb?}
+    # POST /api/render  {id, pipeline, params, exposure?, wb?}
     def render_look(self):
         q = self._json()
         s = get_session(q.get("id"))
         t0 = time.perf_counter()
         base = s.base(q)
-        img = render.apply_look(base, q.get("pipeline", "camera"), q.get("params"),
-                                q.get("colormap"), q.get("table"))
+        img = render.apply_look(base, q.get("pipeline", "camera"), q.get("params"))
         look_s = time.perf_counter() - t0
         self._send(200, {"after": jpeg_data_url(img.rgb), "before": jpeg_data_url(base),
                          "look_s": round(look_s, 3)})
@@ -349,43 +317,83 @@ class Handler(BaseHTTPRequestHandler):
         temp = float(np.clip(temp, *TEMP_RANGE)); tint = float(np.clip(tint, *TINT_RANGE))
         self._send(200, {"temp": round(temp), "tint": round(tint, 1)})
 
-    # POST /api/export  {id, pipeline, params, colormap?, table?, exposure?, wb?, profile, hdr, format, bits?}
+    # POST /api/export  {id, pipeline, params, exposure?, wb?, profile, hdr, format, bits?}
     def export(self):
         q = self._json()
         s = get_session(q.get("id"))
+        dest = q.get("dest")
+        if dest is not None:
+            return self.export_to(q, s, dest)
         fmt = "tif" if q.get("format") == "tif" else "jpg"
         hdr = bool(q.get("hdr"))
         bits = int(q.get("bits") or 16)
         if bits not in (8, 16):
             raise ValueError(f"bits must be 8 or 16, not {bits}")
         t0 = time.perf_counter()
-        img = render.apply_look(s.base(q, preview=False), q.get("pipeline", "camera"), q.get("params"),
-                                q.get("colormap"), q.get("table"))
-        code, profile = render.encode(img.rgb, q.get("profile"), hdr=hdr)
+        exposure, wb = develop_settings(q)
+        profile = "pq" if hdr else (q.get("profile") or "srgb")
         name = f"{Path(s.name).stem}_{q.get('pipeline')}_{profile}.{fmt}"
         # a private scratch directory per export: never next to the user's photo,
         # never shared by two exports running at once
         with tempfile.TemporaryDirectory(prefix="naturalcolor-export-") as tmp:
             out = Path(tmp) / name
-            render.save(code, str(out), profile, bits=bits)
+            render.export(s.cam, s.info, str(out), q.get("pipeline", "camera"), q.get("params"),
+                          exposure=exposure, wb=wb, profile=q.get("profile"), hdr=hdr, bits=bits)
             body = out.read_bytes()
         self._send(200, body, "image/tiff" if fmt == "tif" else "image/jpeg", {
             "Content-Disposition": f'attachment; filename="{name}"',
             "X-Render-Seconds": f"{time.perf_counter() - t0:.3f}",
             "Access-Control-Expose-Headers": "Content-Disposition, X-Render-Seconds"})
 
+    # POST /api/export with "dest": the desktop app writes to the path its native
+    # save dialog returned; needs the per-launch X-App-Token
+    def export_to(self, q, s, dest):
+        token = APP.get("token")
+        if not token or self.headers.get("X-App-Token") != token:
+            raise PermissionError("saving to a path is only available in the desktop app")
+        out = Path(dest).expanduser()
+        fmt = EXPORT_EXT.get(out.suffix.lower())
+        if fmt is None:
+            raise ValueError("save as .jpg or .tif")
+        if not out.parent.is_dir():
+            raise ValueError(f"{out.parent} is not a folder")
+        hdr = bool(q.get("hdr"))
+        bits = int(q.get("bits") or 16)
+        if bits not in (8, 16):
+            raise ValueError(f"bits must be 8 or 16, not {bits}")
+        exposure, wb = develop_settings(q)
+        t0 = time.perf_counter()
+        _, profile = render.export(s.cam, s.info, str(out), q.get("pipeline", "camera"), q.get("params"),
+                                   exposure=exposure, wb=wb, profile=q.get("profile"), hdr=hdr,
+                                   bits=bits if fmt == "tif" else 8)
+        self._send(200, {"path": str(out), "name": out.name, "profile": profile,
+                         "seconds": round(time.perf_counter() - t0, 3)})
 
-def serve(host="127.0.0.1", port=8765, open_browser=True, photo=None, full=False):
+
+def make_server(host="127.0.0.1", port=8765, photo=None, full=False):
+    """The HTTP server (not yet serving), with `photo` already decoded if given."""
     if photo:
         path = Path(photo).expanduser().resolve()
         if not path.is_file():
-            print(f"no such file: {photo}")
-            return 2
+            raise FileNotFoundError(f"no such file: {photo}")
         print(f"Decoding {path.name} ...")
         s = Session(str(path), path.name, full, owned=False)
         add_session(s)
         INITIAL["id"] = s.id
-    httpd = ThreadingHTTPServer((host, port), Handler)
+    return ThreadingHTTPServer((host, port), Handler)
+
+
+def close_sessions():
+    for s in list(SESSIONS.values()):
+        s.close()
+
+
+def serve(host="127.0.0.1", port=8765, open_browser=True, photo=None, full=False):
+    try:
+        httpd = make_server(host, port, photo, full)
+    except FileNotFoundError as e:
+        print(e)
+        return 2
     url = f"http://{host}:{httpd.server_address[1]}/"
     print(f"Natural Color UI running at {url}  (Ctrl+C to stop)")
     if open_browser:
@@ -396,6 +404,5 @@ def serve(host="127.0.0.1", port=8765, open_browser=True, photo=None, full=False
         pass
     finally:
         httpd.server_close()
-        for s in list(SESSIONS.values()):
-            s.close()
+        close_sessions()
     return 0

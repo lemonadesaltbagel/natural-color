@@ -10,6 +10,10 @@ Resolution order (first hit wins):
 Mode 1-3 keep the key away from the shipped code, which is what makes the
 sealed blobs useless on their own.  Mode 4 is the "single artefact" build:
 convenient, but anyone who has the tree also has the loader and the key.
+
+A build sealed with --key-mode embedded uses its own key first: it was
+encrypted for exactly that key, so a developer's external key file or
+environment variable must not shadow it (the desktop app is such a build).
 """
 from __future__ import annotations
 
@@ -90,7 +94,9 @@ def master() -> bytes:
     global _cache
     if _cache is not None:
         return _cache
-    key = _from_env()
+    key = _from_embedded() if _embedded_build() else None
+    if key is None:
+        key = _from_env()
     if key is None:
         key = _from_file(os.environ.get(ENV_KEY_FILE, "") or DEFAULT_KEY_FILE)
     if key is None:
@@ -103,6 +109,14 @@ def master() -> bytes:
         raise MissingKey("vault key must be exactly 32 bytes")
     _cache = key
     return key
+
+
+def _embedded_build() -> bool:
+    from . import _manifest
+    try:
+        return (_manifest.load() or {}).get("key_mode") == "embedded"
+    except RuntimeError:
+        return False
 
 
 def reset_cache():

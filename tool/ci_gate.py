@@ -68,7 +68,7 @@ PUBLIC_REQUIRED = [
 CORE_DIRS = ["naturalcolor/color", "naturalcolor/model"]
 
 #: sealed when present, but not required (the repository may not carry them)
-OPTIONAL_DATA = {"build/iq.pkl"}
+OPTIONAL_DATA: set = set()
 
 PRUNE = {".git", "__pycache__", "node_modules", "dist", "_scratch", "_backup",
          ".venv", "build", "site-packages"}
