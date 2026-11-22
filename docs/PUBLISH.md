@@ -1,6 +1,6 @@
 # 发布流程（framework 公开 + 核心加密分发）
 
-公开仓库只有框架；色彩核心留在私有仓库，发布时由 CI 拉取、加密、过闸门，
+公开仓库只有框架；色彩核心留在私有仓库，发布时由 CI 用只读 deploy key 拉取、加密、过闸门，
 最后只上传密文。核心的明文**从不**出现在公开仓库、也从不进入 release 产物。
 
 ```
@@ -22,7 +22,7 @@ data/gradation.bin        ──┘        ▼
 
 | 类型 | 名称 | 内容 |
 |---|---|---|
-| secret | `CORE_REPO_TOKEN` | 细粒度 PAT，只给私有核心仓库的 **Contents: Read** |
+| secret | `CORE_DEPLOY_KEY` | SSH 私钥；对应公钥作为 **只读 deploy key** 加在私有核心仓库上（只开这一个仓库，不过期，与账号凭据无关） |
 | secret | `CORE_KEY` | 32 字节 hex（`python -c "import secrets;print(secrets.token_hex(32))"`） |
 | variable | `CORE_REPO` | `owner/repo`，私有核心仓库 |
 | variable | `CORE_KEY_MODE` | `external`（默认，用户需持钥）或 `embedded`（开箱即用） |
@@ -49,7 +49,7 @@ git push origin v2.0          # 触发 .github/workflows/release.yml
 
 1. `tool/test_vault.py` —— 17 个加密/容器测试
 2. `ci_gate --profile public --strict` —— 公开树里没有任何核心痕迹
-3. 用 `CORE_REPO_TOKEN` 检出私有核心到 `.core-src/`，合并进工作树
+3. 用 `CORE_DEPLOY_KEY` 经 SSH 检出私有核心（GitHub 主机指纹从 api.github.com/meta 固定），合并进工作树后立即删除 `.core-src/`
 4. `ci_gate --profile core` —— 核心确实齐了（防止空克隆发一个没有核心的包）
 5. `ncseal build --data --key-mode …` → `ci_gate --profile release --strict` →
    `verify_sealed`（与明文树逐字节比对）
@@ -99,3 +99,12 @@ python tool/ci_gate.py --profile release --strict /tmp/nc.tar.gz
 * 换 `CORE_KEY` → 重新打 tag 构建；旧包配新钥解不开（`key_id` 会直接报错）
 * 只想让旧包失效 → 不用重新构建，停止发放密钥即可
 * 泄露怀疑 → 换钥 + 重新发版；`--bind` 可把新包绑死在指定机器上
+
+### 配置 deploy key
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "natural-color release CI (read-only)" -f /tmp/core_deploy
+gh repo deploy-key add /tmp/core_deploy.pub -R <owner>/natural-color-core --title "release CI (read-only)"
+gh secret set CORE_DEPLOY_KEY -R <owner>/natural-color < /tmp/core_deploy
+rm -f /tmp/core_deploy /tmp/core_deploy.pub      # 私钥只留在 secret 里
+```

@@ -73,7 +73,7 @@ EXCLUDE_FROM_RELEASE = [
 ]
 
 COPY_IGNORE = shutil.ignore_patterns(
-    "__pycache__", "*.pyc", ".git", ".venv*", "dist", "_backup", "_scratch",
+    "__pycache__", "*.pyc", ".git", ".core-src", ".venv*", "dist", "_backup", "_scratch",
     "*.ncs", "manifest.json", "_k.py", "*.tif", "*.tiff", "*.jpg", "*.jpeg",
 )
 
