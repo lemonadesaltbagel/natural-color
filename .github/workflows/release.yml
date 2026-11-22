@@ -52,6 +52,7 @@ jobs:
         env:
           CORE_DEPLOY_KEY: ${{ secrets.CORE_DEPLOY_KEY }}
           CORE_REPO: ${{ vars.CORE_REPO }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
           if [ -z "${CORE_DEPLOY_KEY:-}" ]; then
@@ -66,7 +67,8 @@ jobs:
           trap 'rm -f "$key"' EXIT
           (umask 077; printf '%s\n' "$CORE_DEPLOY_KEY" > "$key")
           # pin GitHub's published host keys instead of trusting on first use
-          curl -fsSL https://api.github.com/meta \
+          # authenticated: shared runner IPs hit the anonymous API rate limit (403)
+          curl -fsSL --retry 4 --retry-all-errors -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta \
             | python3 -c "import json,sys; [print('github.com', k) for k in json.load(sys.stdin)['ssh_keys']]" > "$known"
           GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known -o StrictHostKeyChecking=yes" \
             git clone --depth 1 "git@github.com:${CORE_REPO}.git" .core-src
@@ -170,13 +172,15 @@ jobs:
         env:
           CORE_DEPLOY_KEY: ${{ secrets.CORE_DEPLOY_KEY }}
           CORE_REPO: ${{ vars.CORE_REPO }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
           tmp="$(cygpath -u "$RUNNER_TEMP" 2>/dev/null || echo "$RUNNER_TEMP")"
           key="$tmp/core_deploy_key"; known="$tmp/known_hosts"
           trap 'rm -f "$key"' EXIT
           (umask 077; printf '%s\n' "$CORE_DEPLOY_KEY" > "$key")
-          curl -fsSL https://api.github.com/meta \
+          # authenticated: shared runner IPs hit the anonymous API rate limit (403)
+          curl -fsSL --retry 4 --retry-all-errors -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta \
             | python -c "import json,sys; [print('github.com', k) for k in json.load(sys.stdin)['ssh_keys']]" > "$known"
           GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known -o StrictHostKeyChecking=yes" \
             git clone --depth 1 "git@github.com:${CORE_REPO}.git" .core-src
